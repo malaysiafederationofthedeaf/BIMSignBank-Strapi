@@ -1,0 +1,65 @@
+{
+  "kind": "collectionType",
+  "collectionName": "bims",
+  "info": {
+    "singularName": "bim",
+    "pluralName": "bims",
+    "displayName": "BIM"
+  },
+  "options": {
+    "draftAndPublish": true
+  },
+  "attributes": {
+    "Perkataan": {
+      "type": "string"
+    },
+    "Word": {
+      "type": "string"
+    },
+    "category_group": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::category-group.category-group",
+      "inversedBy": "bims"
+    },
+    "Kumpulan": {
+      "type": "string"
+    },
+    "Group": {
+      "type": "string"
+    },
+    "Kategori": {
+      "type": "string"
+    },
+    "Category": {
+      "type": "string"
+    },
+    "Tag": {
+      "type": "string"
+    },
+    "Order": {
+      "type": "integer"
+    },
+    "New": {
+      "type": "string"
+    },
+    "SOTD": {
+      "type": "string"
+    },
+    "Video": {
+      "type": "string"
+    },
+    "Image_Status": {
+      "type": "string"
+    },
+    "Video_Status": {
+      "type": "string"
+    },
+    "Release": {
+      "type": "string"
+    },
+    "Remark": {
+      "type": "text"
+    }
+  }
+}

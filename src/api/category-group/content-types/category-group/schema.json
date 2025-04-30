@@ -1,0 +1,29 @@
+{
+  "kind": "collectionType",
+  "collectionName": "category_groups",
+  "info": {
+    "singularName": "category-group",
+    "pluralName": "category-groups",
+    "displayName": "Category Group"
+  },
+  "options": {
+    "draftAndPublish": true
+  },
+  "attributes": {
+    "KumpulanKategori": {
+      "type": "string"
+    },
+    "GroupCategory": {
+      "type": "string"
+    },
+    "Remark": {
+      "type": "text"
+    },
+    "bims": {
+      "type": "relation",
+      "relation": "oneToMany",
+      "target": "api::bim.bim",
+      "mappedBy": "category_group"
+    }
+  }
+}
