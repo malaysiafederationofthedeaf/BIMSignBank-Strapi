@@ -4,35 +4,26 @@
   "info": {
     "singularName": "bim",
     "pluralName": "bims",
-    "displayName": "BIM"
+    "displayName": "BIM",
+    "description": ""
   },
   "options": {
     "draftAndPublish": true
   },
   "attributes": {
     "Perkataan": {
-      "type": "string"
+      "type": "string",
+      "required": true
     },
     "Word": {
-      "type": "string"
+      "type": "string",
+      "required": true
     },
     "category_group": {
       "type": "relation",
       "relation": "manyToOne",
       "target": "api::category-group.category-group",
       "inversedBy": "bims"
-    },
-    "Kumpulan": {
-      "type": "string"
-    },
-    "Group": {
-      "type": "string"
-    },
-    "Kategori": {
-      "type": "string"
-    },
-    "Category": {
-      "type": "string"
     },
     "Tag": {
       "type": "string"
@@ -43,19 +34,14 @@
     "New": {
       "type": "string"
     },
-    "SOTD": {
-      "type": "string"
-    },
     "Video": {
-      "type": "string"
+      "type": "string",
+      "required": true
     },
     "Image_Status": {
       "type": "string"
     },
     "Video_Status": {
-      "type": "string"
-    },
-    "Release": {
       "type": "string"
     },
     "Remark": {
