@@ -372,6 +372,7 @@ export interface AdminUser extends Struct.CollectionTypeSchema {
 export interface ApiBimBim extends Struct.CollectionTypeSchema {
   collectionName: 'bims';
   info: {
+    description: '';
     displayName: 'BIM';
     pluralName: 'bims';
     singularName: 'bim';
@@ -380,7 +381,6 @@ export interface ApiBimBim extends Struct.CollectionTypeSchema {
     draftAndPublish: true;
   };
   attributes: {
-    Category: Schema.Attribute.String;
     category_group: Schema.Attribute.Relation<
       'manyToOne',
       'api::category-group.category-group'
@@ -388,27 +388,22 @@ export interface ApiBimBim extends Struct.CollectionTypeSchema {
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
-    Group: Schema.Attribute.String;
     Image_Status: Schema.Attribute.String;
-    Kategori: Schema.Attribute.String;
-    Kumpulan: Schema.Attribute.String;
     locale: Schema.Attribute.String & Schema.Attribute.Private;
     localizations: Schema.Attribute.Relation<'oneToMany', 'api::bim.bim'> &
       Schema.Attribute.Private;
     New: Schema.Attribute.String;
     Order: Schema.Attribute.Integer;
-    Perkataan: Schema.Attribute.String;
+    Perkataan: Schema.Attribute.String & Schema.Attribute.Required;
     publishedAt: Schema.Attribute.DateTime;
-    Release: Schema.Attribute.String;
     Remark: Schema.Attribute.Text;
-    SOTD: Schema.Attribute.String;
     Tag: Schema.Attribute.String;
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
-    Video: Schema.Attribute.String;
+    Video: Schema.Attribute.String & Schema.Attribute.Required;
     Video_Status: Schema.Attribute.String;
-    Word: Schema.Attribute.String;
+    Word: Schema.Attribute.String & Schema.Attribute.Required;
   };
 }
 
