@@ -46,6 +46,9 @@
     },
     "Remark": {
       "type": "text"
+    },
+    "ExampleSentence": {
+      "type": "text"
     }
   }
 }
