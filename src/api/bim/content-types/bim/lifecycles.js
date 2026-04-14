@@ -45,7 +45,13 @@ async function ensureTmpDir(strapi) {
 
 async function compressToWebp(strapi, uploadFile, baseNameSafe, index) {
   const uploadsRoot = getUploadsRoot(strapi);
-  const absoluteInputPath = path.join(uploadsRoot, uploadFile.url);
+
+  // remove leading slash so path.join doesn’t discard uploadsRoot
+  const relativeUrl = uploadFile.url.startsWith('/')
+    ? uploadFile.url.slice(1)
+    : uploadFile.url;
+
+  const absoluteInputPath = path.join(uploadsRoot, relativeUrl);
 
   const originalName = uploadFile.name || '';
   const ext = getExtFromName(originalName);
@@ -58,8 +64,6 @@ async function compressToWebp(strapi, uploadFile, baseNameSafe, index) {
   }
 
   const tmpDir = await ensureTmpDir(strapi);
-
-  // If multiple images, add -1, -2, etc.
   const indexSuffix = index > 0 ? `-${index + 1}` : '';
   const outputFileName = `${baseNameSafe}${indexSuffix}.webp`;
   const tmpOutputPath = path.join(tmpDir, outputFileName);
@@ -93,9 +97,16 @@ async function uploadToR2(strapi, outputFileName, tmpOutputPath) {
 
 async function handleImages(strapi, entryId) {
   // Re-fetch with media populated to be safe
+  strapi.log.info(`[bim lifecycles] handleImages called for entry ${entryId}`);
+
   const entry = await strapi.entityService.findOne('api::bim.bim', entryId, {
     populate: { Image: true },
   });
+
+  if (!entry || !isPublished(entry)) {
+    strapi.log.info('[bim lifecycles] entry not published or missing');
+    return;
+  }
 
   if (!entry || !isPublished(entry)) return;
 
