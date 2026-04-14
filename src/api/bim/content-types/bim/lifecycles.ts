@@ -104,6 +104,23 @@ async function uploadToR2(
   }
 }
 
+async function deleteFromR2(strapi: any, outputFileName: string) {
+  const objectPath = `${BUCKET}/vocab/${outputFileName}`;
+  const cmd = `./node_modules/.bin/wrangler r2 object delete "${objectPath}" --remote`;
+
+  try {
+    const { stdout, stderr } = await execAsync(cmd, {
+      cwd: strapi.dirs.app.root,
+      env: process.env,
+    });
+
+    if (stdout) strapi.log.info(`[bim lifecycles] R2 delete stdout: ${stdout}`);
+    if (stderr) strapi.log.warn(`[bim lifecycles] R2 delete stderr: ${stderr}`);
+  } catch (err) {
+    strapi.log.error('[bim lifecycles] Failed to delete from R2', err);
+  }
+}
+
 // ----- Main handler -----
 
 async function handleImages(strapi: any, entryId: number) {
@@ -166,6 +183,47 @@ async function handleImages(strapi: any, entryId: number) {
   }
 }
 
+async function deleteImagesFromR2(strapi: any, entryId: number) {
+  strapi.log.info(
+    `[bim lifecycles] deleteImagesFromR2 called for entry ${entryId}`
+  );
+
+  const entry = await strapi.entityService.findOne('api::bim.bim', entryId, {
+    populate: { Image: true },
+  });
+
+  if (!entry) {
+    strapi.log.info('[bim lifecycles] entry missing on delete');
+    return;
+  }
+
+  const vocabName = entry.Perkataan;
+  if (!vocabName) {
+    strapi.log.warn(
+      '[bim lifecycles] Perkataan missing on delete, skipping R2 cleanup'
+    );
+    return;
+  }
+
+  const baseNameSafe = sanitizeName(vocabName);
+
+  let images = entry.Image;
+  if (!images) {
+    strapi.log.info('[bim lifecycles] No Image attached on delete');
+    return;
+  }
+
+  if (!Array.isArray(images)) {
+    images = [images];
+  }
+
+  for (let i = 0; i < images.length; i++) {
+    const indexSuffix = i > 0 ? `-${i + 1}` : '';
+    const outputFileName = `${baseNameSafe}${indexSuffix}.webp`;
+    await deleteFromR2(strapi, outputFileName);
+  }
+}
+
 // ----- Lifecycles -----
 
 export default {
@@ -179,5 +237,21 @@ export default {
     const { result } = event;
     if (!result || !result.id) return;
     await handleImages(strapi, result.id);
+  },
+
+  async beforeDelete(event: any) {
+    const where = event?.params?.where;
+    const id = typeof where?.id === 'number' || typeof where?.id === 'string'
+      ? where.id
+      : null;
+
+    if (!id) {
+      strapi.log.warn(
+        '[bim lifecycles] beforeDelete called without simple id; skipping R2 cleanup'
+      );
+      return;
+    }
+
+    await deleteImagesFromR2(strapi, Number(id));
   },
 };
