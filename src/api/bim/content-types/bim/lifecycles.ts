@@ -87,7 +87,9 @@ async function uploadToR2(
   tmpOutputPath: string
 ) {
   const objectPath = `${BUCKET}/vocab/${outputFileName}`;
-  const cmd = `npx wrangler r2 object put "${objectPath}" --file "${tmpOutputPath}" --remote`;
+
+  // Use locally installed wrangler, no npx
+  const cmd = `./node_modules/.bin/wrangler r2 object put "${objectPath}" --file "${tmpOutputPath}" --remote`;
 
   try {
     const { stdout, stderr } = await execAsync(cmd, {
