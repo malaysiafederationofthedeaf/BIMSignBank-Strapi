@@ -1,2 +1,2 @@
 name = "bim-sign-bank-r2"
-account_id = "${CLOUDFLARE_ACCOUNT_ID}"
+account_id = "fe607ca7f93618d704f57eaa46d4c664"

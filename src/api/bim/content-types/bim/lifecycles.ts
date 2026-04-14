@@ -1,10 +1,8 @@
-'use strict';
-
-const path = require('path');
-const fs = require('fs/promises');
-const sharp = require('sharp');
-const util = require('util');
-const { exec } = require('child_process');
+import path from 'path';
+import fs from 'fs/promises';
+import sharp from 'sharp';
+import util from 'util';
+import { exec } from 'child_process';
 
 const execAsync = util.promisify(exec);
 
@@ -15,7 +13,7 @@ const BUCKET = process.env.R2_BUCKET || 'mfd-signbank-images';
 
 // ----- Helpers -----
 
-function sanitizeName(name) {
+function sanitizeName(name: string) {
   return String(name)
     .trim()
     .toLowerCase()
@@ -23,30 +21,35 @@ function sanitizeName(name) {
     .replace(/[^a-z0-9-]/g, '');
 }
 
-function isPublished(entry) {
+function isPublished(entry: any) {
   return !!entry.publishedAt;
 }
 
-function getUploadsRoot(strapi) {
+function getUploadsRoot(strapi: any) {
   // Strapi serves uploads from <project>/public/uploads
   return strapi.dirs.static.public;
 }
 
-function getExtFromName(name) {
+function getExtFromName(name: string) {
   const match = name.match(/\.([^.]+)$/);
   return match ? match[1].toLowerCase() : '';
 }
 
-async function ensureTmpDir(strapi) {
+async function ensureTmpDir(strapi: any) {
   const tmpDir = path.join(strapi.dirs.app.root, '.tmp', 'r2');
   await fs.mkdir(tmpDir, { recursive: true });
   return tmpDir;
 }
 
-async function compressToWebp(strapi, uploadFile, baseNameSafe, index) {
+async function compressToWebp(
+  strapi: any,
+  uploadFile: any,
+  baseNameSafe: string,
+  index: number
+) {
   const uploadsRoot = getUploadsRoot(strapi);
 
-  // remove leading slash so path.join doesn’t discard uploadsRoot
+  // IMPORTANT: remove leading slash so path.join works correctly
   const relativeUrl = uploadFile.url.startsWith('/')
     ? uploadFile.url.slice(1)
     : uploadFile.url;
@@ -64,6 +67,8 @@ async function compressToWebp(strapi, uploadFile, baseNameSafe, index) {
   }
 
   const tmpDir = await ensureTmpDir(strapi);
+
+  // If multiple images, add -1, -2, etc.
   const indexSuffix = index > 0 ? `-${index + 1}` : '';
   const outputFileName = `${baseNameSafe}${indexSuffix}.webp`;
   const tmpOutputPath = path.join(tmpDir, outputFileName);
@@ -76,7 +81,11 @@ async function compressToWebp(strapi, uploadFile, baseNameSafe, index) {
   return { outputFileName, tmpOutputPath };
 }
 
-async function uploadToR2(strapi, outputFileName, tmpOutputPath) {
+async function uploadToR2(
+  strapi: any,
+  outputFileName: string,
+  tmpOutputPath: string
+) {
   const objectPath = `${BUCKET}/vocab/${outputFileName}`;
   const cmd = `npx wrangler r2 object put "${objectPath}" --file "${tmpOutputPath}" --remote`;
 
@@ -95,24 +104,23 @@ async function uploadToR2(strapi, outputFileName, tmpOutputPath) {
 
 // ----- Main handler -----
 
-async function handleImages(strapi, entryId) {
-  // Re-fetch with media populated to be safe
+async function handleImages(strapi: any, entryId: number) {
   strapi.log.info(`[bim lifecycles] handleImages called for entry ${entryId}`);
 
   const entry = await strapi.entityService.findOne('api::bim.bim', entryId, {
     populate: { Image: true },
   });
 
-  if (!entry || !isPublished(entry)) {
-    strapi.log.info('[bim lifecycles] entry not published or missing');
+  if (!entry) {
+    strapi.log.info('[bim lifecycles] entry missing');
     return;
   }
 
-  if (!entry || !isPublished(entry)) return;
-
   const vocabName = entry.Perkataan;
   if (!vocabName) {
-    strapi.log.warn('[bim lifecycles] Perkataan is missing, skipping image processing');
+    strapi.log.warn(
+      '[bim lifecycles] Perkataan is missing, skipping image processing'
+    );
     return;
   }
 
@@ -124,7 +132,6 @@ async function handleImages(strapi, entryId) {
     return;
   }
 
-  // Image field is multiple: true → normalize to array
   if (!Array.isArray(images)) {
     images = [images];
   }
@@ -140,7 +147,6 @@ async function handleImages(strapi, entryId) {
 
     await uploadToR2(strapi, outputFileName, tmpOutputPath);
 
-    // Optionally: rename the Upload file record to match vocab name
     try {
       await strapi.entityService.update('plugin::upload.file', img.id, {
         data: {
@@ -150,21 +156,24 @@ async function handleImages(strapi, entryId) {
         },
       });
     } catch (err) {
-      strapi.log.error('[bim lifecycles] Failed to update upload file record', err);
+      strapi.log.error(
+        '[bim lifecycles] Failed to update upload file record',
+        err
+      );
     }
   }
 }
 
 // ----- Lifecycles -----
 
-module.exports = {
-  async afterCreate(event) {
+export default {
+  async afterCreate(event: any) {
     const { result } = event;
     if (!result || !result.id) return;
     await handleImages(strapi, result.id);
   },
 
-  async afterUpdate(event) {
+  async afterUpdate(event: any) {
     const { result } = event;
     if (!result || !result.id) return;
     await handleImages(strapi, result.id);
