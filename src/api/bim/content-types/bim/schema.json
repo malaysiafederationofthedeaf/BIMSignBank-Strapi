@@ -47,6 +47,9 @@
     "Remark": {
       "type": "text"
     },
+    "ExampleSentence": {
+      "type": "text"
+    },
     "Image": {
       "allowedTypes": [
         "images",
