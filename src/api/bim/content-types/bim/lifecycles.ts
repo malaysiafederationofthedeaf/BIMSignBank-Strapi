@@ -8,7 +8,7 @@ const execAsync = util.promisify(exec);
 
 const TARGET_WIDTH = 350;
 const WEBP_QUALITY = 50;
-const VALID_INPUT_EXT = /\.(jpe?g|png)$/i;
+const VALID_INPUT_EXT = /\.(jpe?g|png|webp)$/i;
 const BUCKET = process.env.R2_BUCKET || 'mfd-signbank-images';
 
 // ----- Helpers -----
