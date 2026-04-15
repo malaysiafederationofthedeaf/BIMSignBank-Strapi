@@ -1,10 +1,8 @@
 import path from 'path';
 import fs from 'fs/promises';
 import sharp from 'sharp';
-import util from 'util';
-import { exec } from 'child_process';
-
-const execAsync = util.promisify(exec);
+import { PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
+import { r2Client } from '../../../../utils/r2Client'; // adjust relative path
 
 const TARGET_WIDTH = 350;
 const WEBP_QUALITY = 50;
@@ -86,38 +84,45 @@ async function uploadToR2(
   outputFileName: string,
   tmpOutputPath: string
 ) {
-  const objectPath = `${BUCKET}/vocab/${outputFileName}`;
-
-  // Use locally installed wrangler, no npx
-  const cmd = `./node_modules/.bin/wrangler r2 object put "${objectPath}" --file "${tmpOutputPath}" --remote`;
+  const bucket = process.env.R2_BUCKET || 'mfd-signbank-images';
+  const key = `vocab/${outputFileName}`;
 
   try {
-    const { stdout, stderr } = await execAsync(cmd, {
-      cwd: strapi.dirs.app.root,
-      env: process.env,
-    });
+    const fileBuffer = await fs.readFile(tmpOutputPath);
 
-    if (stdout) strapi.log.info(`[bim lifecycles] R2 upload stdout: ${stdout}`);
-    if (stderr) strapi.log.warn(`[bim lifecycles] R2 upload stderr: ${stderr}`);
+    await r2Client.send(
+      new PutObjectCommand({
+        Bucket: bucket,
+        Key: key,
+        Body: fileBuffer,
+        ContentType: 'image/webp',
+      })
+    );
+
+    strapi.log.info(
+      `[bim lifecycles] Uploaded to R2 bucket=${bucket} key=${key}`
+    );
   } catch (err) {
-    strapi.log.error('[bim lifecycles] Failed to upload to R2', err);
+    strapi.log.error('[bim lifecycles] Failed to upload to R2 via API', err);
   }
 }
 
 async function deleteFromR2(strapi: any, outputFileName: string) {
-  const objectPath = `${BUCKET}/vocab/${outputFileName}`;
-  const cmd = `./node_modules/.bin/wrangler r2 object delete "${objectPath}" --remote`;
+  const bucket = process.env.R2_BUCKET || 'mfd-signbank-images';
+  const key = `vocab/${outputFileName}`;
 
   try {
-    const { stdout, stderr } = await execAsync(cmd, {
-      cwd: strapi.dirs.app.root,
-      env: process.env,
-    });
-
-    if (stdout) strapi.log.info(`[bim lifecycles] R2 delete stdout: ${stdout}`);
-    if (stderr) strapi.log.warn(`[bim lifecycles] R2 delete stderr: ${stderr}`);
+    await r2Client.send(
+      new DeleteObjectCommand({
+        Bucket: bucket,
+        Key: key,
+      })
+    );
+    strapi.log.info(
+      `[bim lifecycles] Deleted from R2 bucket=${bucket} key=${key}`
+    );
   } catch (err) {
-    strapi.log.error('[bim lifecycles] Failed to delete from R2', err);
+    strapi.log.error('[bim lifecycles] Failed to delete from R2 via API', err);
   }
 }
 
