@@ -128,12 +128,14 @@ async function deleteFromR2(strapi: any, outputFileName: string) {
 
 // ----- Main handler -----
 
-async function handleImages(strapi: any, entryId: number) {
+async function handleImages(strapi: any, entryId: number, rawResult?: any) {
   strapi.log.info(`[bim lifecycles] handleImages called for entry ${entryId}`);
 
-  const entry = await strapi.entityService.findOne('api::bim.bim', entryId, {
-    populate: { Image: true },
-  });
+  let entry =
+    rawResult ??
+    (await strapi.entityService.findOne('api::bim.bim', entryId, {
+      populate: { Image: true },
+    }));
 
   if (!entry) {
     strapi.log.info('[bim lifecycles] entry missing');
@@ -152,6 +154,11 @@ async function handleImages(strapi: any, entryId: number) {
 
   let images = entry.Image;
   if (!images) {
+    strapi.log.info(
+      `[bim lifecycles] Image field at runtime: ${JSON.stringify(
+        entry.Image
+      )}`
+    );
     strapi.log.info('[bim lifecycles] No Image attached, skipping');
     return;
   }
@@ -235,13 +242,13 @@ export default {
   async afterCreate(event: any) {
     const { result } = event;
     if (!result || !result.id) return;
-    await handleImages(strapi, result.id);
+    await handleImages(strapi, result.id, result);
   },
 
   async afterUpdate(event: any) {
     const { result } = event;
     if (!result || !result.id) return;
-    await handleImages(strapi, result.id);
+    await handleImages(strapi, result.id, result);
   },
 
   async beforeDelete(event: any) {
