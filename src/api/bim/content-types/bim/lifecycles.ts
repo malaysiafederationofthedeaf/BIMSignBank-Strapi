@@ -1,3 +1,5 @@
+import { errors } from '@strapi/utils';
+const { ValidationError } = errors;
 import path from 'path';
 import fs from 'fs/promises';
 import sharp from 'sharp';
@@ -131,11 +133,14 @@ async function deleteFromR2(strapi: any, outputFileName: string) {
 async function handleImages(strapi: any, entryId: number, rawResult?: any) {
   strapi.log.info(`[bim lifecycles] handleImages called for entry ${entryId}`);
 
-  let entry =
-    rawResult ??
-    (await strapi.entityService.findOne('api::bim.bim', entryId, {
+  // Start from rawResult, but if Image is missing/null, re-fetch with populate
+  let entry = rawResult;
+
+  if (!entry || entry.Image == null) {
+    entry = await strapi.entityService.findOne('api::bim.bim', entryId, {
       populate: { Image: true },
-    }));
+    });
+  }
 
   if (!entry) {
     strapi.log.info('[bim lifecycles] entry missing');
@@ -236,9 +241,46 @@ async function deleteImagesFromR2(strapi: any, entryId: number) {
   }
 }
 
+function hasAtLeastOneImage(imageField: any): boolean {
+  if (!imageField) return false;
+  if (Array.isArray(imageField)) return imageField.length > 0;
+  return true; // single image case
+}
+
+async function validateImagesOrThrow(strapi: any, params: any) {
+  const { data, where } = params;
+
+  // CREATE: data.Image must contain at least one image
+  if (!where) {
+    if (!hasAtLeastOneImage(data.Image)) {
+      throw new ValidationError(
+        'Please attach at least one JPEG/PNG/WEBP image before saving this BIM entry.'
+      );
+    }
+    return;
+  }
+
+  // UPDATE: only validate if Image is being changed explicitly
+  if ('Image' in data) {
+    if (!hasAtLeastOneImage(data.Image)) {
+      throw new ValidationError(
+        'Please attach at least one JPEG/PNG/WEBP image before saving this BIM entry.'
+      );
+    }
+  }
+}
+
 // ----- Lifecycles -----
 
 export default {
+  async beforeCreate(event: any) {
+    await validateImagesOrThrow(strapi, event.params);
+  },
+
+  async beforeUpdate(event: any) {
+    await validateImagesOrThrow(strapi, event.params);
+  },
+
   async afterCreate(event: any) {
     const { result } = event;
     if (!result || !result.id) return;
@@ -253,9 +295,10 @@ export default {
 
   async beforeDelete(event: any) {
     const where = event?.params?.where;
-    const id = typeof where?.id === 'number' || typeof where?.id === 'string'
-      ? where.id
-      : null;
+    const id =
+      typeof where?.id === 'number' || typeof where?.id === 'string'
+        ? where.id
+        : null;
 
     if (!id) {
       strapi.log.warn(
