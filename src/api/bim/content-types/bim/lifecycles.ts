@@ -173,28 +173,32 @@ async function handleImages(strapi: any, entryId: number, rawResult?: any) {
   }
 
   for (let i = 0; i < images.length; i++) {
-    const img = images[i];
-    if (!img || !img.url) continue;
+  const img = images[i];
+  if (!img || !img.url) continue;
 
+  try {
     const webpInfo = await compressToWebp(strapi, img, baseNameSafe, i);
-    if (!webpInfo) continue;
+    if (!webpInfo) {
+      // Unsupported or failed compression → treat as failure for this image
+      throw new Error('Image compression failed or unsupported format.');
+    }
 
     const { outputFileName, tmpOutputPath } = webpInfo;
 
     await uploadToR2(strapi, outputFileName, tmpOutputPath);
 
-    try {
-      await strapi.entityService.update('plugin::upload.file', img.id, {
-        data: {
-          name: outputFileName,
-          alternativeText: vocabName,
-          caption: vocabName,
-        },
-      });
-    } catch (err) {
-      strapi.log.error(
-        '[bim lifecycles] Failed to update upload file record',
-        err
+    await strapi.entityService.update('plugin::upload.file', img.id, {
+      data: {
+        name: outputFileName,
+        alternativeText: vocabName,
+        caption: vocabName,
+      },
+    });
+  } catch (err) {
+      strapi.log.error('[bim lifecycles] Image processing failed', err);
+      // An image WAS attached, but processing failed → surface a blocking error
+      throw new ValidationError(
+        'Image upload/compression for this BIM entry failed. Please try again with a different image or try again later.'
       );
     }
   }
@@ -248,26 +252,29 @@ function hasAtLeastOneImage(imageField: any): boolean {
 }
 
 async function validateImagesOrThrow(strapi: any, params: any) {
-  const { data, where } = params;
+  // NO VALIDATION FOR NOW
 
-  // CREATE: data.Image must contain at least one image
-  if (!where) {
-    if (!hasAtLeastOneImage(data.Image)) {
-      throw new ValidationError(
-        'Please attach at least one JPEG/PNG/WEBP image before saving this BIM entry.'
-      );
-    }
-    return;
-  }
+  // const { data, where } = params;
 
-  // UPDATE: only validate if Image is being changed explicitly
-  if ('Image' in data) {
-    if (!hasAtLeastOneImage(data.Image)) {
-      throw new ValidationError(
-        'Please attach at least one JPEG/PNG/WEBP image before saving this BIM entry.'
-      );
-    }
-  }
+  // // CREATE: data.Image must contain at least one image
+  // if (!where) {
+  //   if (!hasAtLeastOneImage(data.Image)) {
+  //     throw new ValidationError(
+  //       'Please attach at least one JPEG/PNG/WEBP image before saving this BIM entry.'
+  //     );
+  //   }
+  //   return;
+  // }
+
+  // // UPDATE: only validate if Image is being changed explicitly
+  // if ('Image' in data) {
+  //   if (!hasAtLeastOneImage(data.Image)) {
+  //     throw new ValidationError(
+  //       'Please attach at least one JPEG/PNG/WEBP image before saving this BIM entry.'
+  //     );
+  //   }
+  // }
+  return;
 }
 
 // ----- Lifecycles -----
