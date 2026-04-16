@@ -315,8 +315,19 @@ export default {
   },
 
   async afterUpdate(event: any) {
-    const { result } = event;
+    const { result, params } = event;
     if (!result || !result.id) return;
+
+    // If this update is ONLY changing Image_Public_URL, skip image handling
+    const data = params?.data || {};
+    const keys = Object.keys(data);
+    if (keys.length === 1 && keys[0] === 'Image_Public_URL') {
+      strapi.log.info(
+        `[bim lifecycles] afterUpdate: only Image_Public_URL changed, skipping handleImages for entry ${result.id}`
+      );
+      return;
+    }
+
     await handleImages(strapi, result.id, result);
   },
 
