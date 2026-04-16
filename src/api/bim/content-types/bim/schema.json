@@ -57,6 +57,9 @@
       ],
       "type": "media",
       "multiple": true
+    },
+    "Image_Public_URL": {
+      "type": "string"
     }
   }
 }
