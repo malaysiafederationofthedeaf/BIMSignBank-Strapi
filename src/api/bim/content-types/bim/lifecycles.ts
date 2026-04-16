@@ -15,6 +15,7 @@ const R2_PUBLIC_BASE_URL = process.env.R2_PUBLIC_BASE_URL;
 // ----- Helpers -----
 
 function sanitizeName(name: string) {
+  // no longer used for vocab image filenames, kept for reference
   return String(name)
     .trim()
     .toLowerCase()
@@ -156,7 +157,8 @@ async function handleImages(strapi: any, entryId: number, rawResult?: any) {
     return;
   }
 
-  const baseNameSafe = sanitizeName(vocabName);
+  // IMPORTANT: use raw Perkataan (trimmed) so filenames match frontend expectation
+  const baseNameSafe = vocabName.trim();
 
   let images = entry.Image;
   if (!images) {
@@ -174,29 +176,28 @@ async function handleImages(strapi: any, entryId: number, rawResult?: any) {
   }
 
   for (let i = 0; i < images.length; i++) {
-  const img = images[i];
-  if (!img || !img.url) continue;
+    const img = images[i];
+    if (!img || !img.url) continue;
 
-  try {
-    const webpInfo = await compressToWebp(strapi, img, baseNameSafe, i);
-    if (!webpInfo) {
-      // Unsupported or failed compression → treat as failure for this image
-      throw new Error('Image compression failed or unsupported format.');
-    }
+    try {
+      const webpInfo = await compressToWebp(strapi, img, baseNameSafe, i);
+      if (!webpInfo) {
+        // Unsupported or failed compression → treat as failure for this image
+        throw new Error('Image compression failed or unsupported format.');
+      }
 
-    const { outputFileName, tmpOutputPath } = webpInfo;
+      const { outputFileName, tmpOutputPath } = webpInfo;
 
-    await uploadToR2(strapi, outputFileName, tmpOutputPath);
+      await uploadToR2(strapi, outputFileName, tmpOutputPath);
 
-    await strapi.entityService.update('plugin::upload.file', img.id, {
-      data: {
-        name: outputFileName,
-        alternativeText: vocabName,
-        caption: vocabName,
-      },
-    });
-
-  } catch (err) {
+      await strapi.entityService.update('plugin::upload.file', img.id, {
+        data: {
+          name: outputFileName,
+          alternativeText: vocabName,
+          caption: vocabName,
+        },
+      });
+    } catch (err) {
       strapi.log.error('[bim lifecycles] Image processing failed', err);
       // An image WAS attached, but processing failed → surface a blocking error
       throw new ValidationError(
@@ -228,7 +229,8 @@ async function deleteImagesFromR2(strapi: any, entryId: number) {
     return;
   }
 
-  const baseNameSafe = sanitizeName(vocabName);
+  // Use the same naming rule as handleImages
+  const baseNameSafe = vocabName.trim();
 
   let images = entry.Image;
   if (!images) {
@@ -255,27 +257,6 @@ function hasAtLeastOneImage(imageField: any): boolean {
 
 async function validateImagesOrThrow(strapi: any, params: any) {
   // NO VALIDATION FOR NOW
-
-  // const { data, where } = params;
-
-  // // CREATE: data.Image must contain at least one image
-  // if (!where) {
-  //   if (!hasAtLeastOneImage(data.Image)) {
-  //     throw new ValidationError(
-  //       'Please attach at least one JPEG/PNG/WEBP image before saving this BIM entry.'
-  //     );
-  //   }
-  //   return;
-  // }
-
-  // // UPDATE: only validate if Image is being changed explicitly
-  // if ('Image' in data) {
-  //   if (!hasAtLeastOneImage(data.Image)) {
-  //     throw new ValidationError(
-  //       'Please attach at least one JPEG/PNG/WEBP image before saving this BIM entry.'
-  //     );
-  //   }
-  // }
   return;
 }
 
