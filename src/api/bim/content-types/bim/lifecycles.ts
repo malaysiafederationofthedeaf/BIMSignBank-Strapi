@@ -196,24 +196,6 @@ async function handleImages(strapi: any, entryId: number, rawResult?: any) {
       },
     });
 
-    // For the first image, set the public URL on the BIM entry
-    if (i === 0 && R2_PUBLIC_BASE_URL) {
-      // IMPORTANT: encode filename for URL safety
-      const publicUrl = `${R2_PUBLIC_BASE_URL}/vocab/${encodeURIComponent(
-        outputFileName
-      )}`;
-
-      await strapi.entityService.update('api::bim.bim', entryId, {
-        data: {
-          Image_Public_URL: publicUrl,
-        },
-      });
-
-      strapi.log.info(
-        `[bim lifecycles] Set Image_Public_URL=${publicUrl} for entry ${entryId}`
-      );
-    }
-
   } catch (err) {
       strapi.log.error('[bim lifecycles] Image processing failed', err);
       // An image WAS attached, but processing failed → surface a blocking error
@@ -301,6 +283,11 @@ async function validateImagesOrThrow(strapi: any, params: any) {
 
 export default {
   async beforeCreate(event: any) {
+    strapi.log.info(
+      `[bim lifecycles] beforeCreate called with data=${JSON.stringify(
+        event.params.data
+      )}`
+    );
     await validateImagesOrThrow(strapi, event.params);
   },
 
