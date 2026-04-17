@@ -388,6 +388,8 @@ export interface ApiBimBim extends Struct.CollectionTypeSchema {
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
+    ExampleSentence: Schema.Attribute.Text;
+    Image: Schema.Attribute.Media<'images' | 'files', true>;
     Image_Status: Schema.Attribute.String;
     locale: Schema.Attribute.String & Schema.Attribute.Private;
     localizations: Schema.Attribute.Relation<'oneToMany', 'api::bim.bim'> &
