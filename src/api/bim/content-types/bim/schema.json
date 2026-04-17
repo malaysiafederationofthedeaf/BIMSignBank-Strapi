@@ -46,6 +46,17 @@
     },
     "Remark": {
       "type": "text"
+    },
+    "Example_Sentence": {
+      "type": "text"
+    },
+    "Image": {
+      "allowedTypes": [
+        "images",
+        "files"
+      ],
+      "type": "media",
+      "multiple": true
     }
   }
 }
