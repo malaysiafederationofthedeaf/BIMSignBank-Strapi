@@ -14,13 +14,14 @@ const R2_PUBLIC_BASE_URL = process.env.R2_PUBLIC_BASE_URL;
 
 // ----- Helpers -----
 
-function sanitizeName(name: string) {
-  // no longer used for vocab image filenames, kept for reference
-  return String(name)
+// Shared slug for vocab images (must match frontend Store.slugPerkataan)
+function slugPerkataan(vocabName: string): string {
+  return vocabName
     .trim()
-    .toLowerCase()
-    .replace(/\s+/g, '-')
-    .replace(/[^a-z0-9-]/g, '');
+    .replace(/[!/]/g, "-")        // legacy: '!' and '/' -> '-'
+    .replace(/\?/g, "")           // legacy: remove '?'
+    .replace(/[<>:"\|*]/g, "")   // extra safety for Windows filenames
+    .replace(/[. ]+$/g, "");      // strip trailing '.' / spaces
 }
 
 function isPublished(entry: any) {
@@ -157,8 +158,7 @@ async function handleImages(strapi: any, entryId: number, rawResult?: any) {
     return;
   }
 
-  // IMPORTANT: use raw Perkataan (trimmed) so filenames match frontend expectation
-  const baseNameSafe = vocabName.trim();
+  const baseNameSafe = slugPerkataan(vocabName);
 
   let images = entry.Image;
   if (!images) {
@@ -230,7 +230,7 @@ async function deleteImagesFromR2(strapi: any, entryId: number) {
   }
 
   // Use the same naming rule as handleImages
-  const baseNameSafe = vocabName.trim();
+  const baseNameSafe = slugPerkataan(vocabName);
 
   let images = entry.Image;
   if (!images) {
