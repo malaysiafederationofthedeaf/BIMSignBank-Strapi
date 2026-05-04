@@ -25,15 +25,6 @@
       "target": "api::category-group.category-group",
       "inversedBy": "bims"
     },
-    "Tag": {
-      "type": "string"
-    },
-    "Order": {
-      "type": "integer"
-    },
-    "New": {
-      "type": "string"
-    },
     "Video": {
       "type": "string",
       "required": true
@@ -43,9 +34,6 @@
     },
     "Video_Status": {
       "type": "string"
-    },
-    "Remark": {
-      "type": "text"
     },
     "Example_Sentence": {
       "type": "text"
