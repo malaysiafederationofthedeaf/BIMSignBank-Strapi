@@ -394,12 +394,8 @@ export interface ApiBimBim extends Struct.CollectionTypeSchema {
     locale: Schema.Attribute.String & Schema.Attribute.Private;
     localizations: Schema.Attribute.Relation<'oneToMany', 'api::bim.bim'> &
       Schema.Attribute.Private;
-    New: Schema.Attribute.String;
-    Order: Schema.Attribute.Integer;
     Perkataan: Schema.Attribute.String & Schema.Attribute.Required;
     publishedAt: Schema.Attribute.DateTime;
-    Remark: Schema.Attribute.Text;
-    Tag: Schema.Attribute.String;
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;

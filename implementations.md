@@ -51,15 +51,6 @@ The BIM collection was updated to match the XLSX file structure with the followi
     "Category": {
       "type": "string"
     },
-    "Tag": {
-      "type": "string"
-    },
-    "Order": {
-      "type": "integer"
-    },
-    "New": {
-      "type": "string"
-    },
     "SOTD": {
       "type": "string"
     },
@@ -74,9 +65,6 @@ The BIM collection was updated to match the XLSX file structure with the followi
     },
     "Release": {
       "type": "string"
-    },
-    "Remark": {
-      "type": "text"
     }
   }
 }
