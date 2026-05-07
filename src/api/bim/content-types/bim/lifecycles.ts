@@ -109,6 +109,7 @@ async function uploadToR2(
     );
   } catch (err) {
     strapi.log.error('[bim lifecycles] Failed to upload to R2 via API', err);
+    throw err; // re-throw to be caught in handleImages and trigger ValidationError
   }
 }
 
@@ -256,8 +257,27 @@ function hasAtLeastOneImage(imageField: any): boolean {
 }
 
 async function validateImagesOrThrow(strapi: any, params: any) {
-  // NO VALIDATION FOR NOW
-  return;
+  const data = params?.data || {};
+  const perkataan = data.Perkataan;
+
+  if (typeof perkataan === 'string') {
+    // Block characters that we know cause issues across the stack:
+    //  - %: can break decodeURIComponent if not properly encoded
+    //  - \: has caused image / routing / DB weirdness
+    const forbiddenPattern = /[%\\]/g;
+    const matches = perkataan.match(forbiddenPattern);
+
+    if (matches) {
+      const unique = Array.from(new Set(matches));
+      throw new ValidationError(
+        `Perkataan contains unsupported characters: ${unique.join(
+          ' '
+        )}. Please remove these characters before saving.`
+      );
+    }
+  }
+
+  // Add more rules later if needed.
 }
 
 // ----- Lifecycles -----
