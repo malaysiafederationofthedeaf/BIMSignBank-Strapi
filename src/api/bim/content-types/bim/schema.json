@@ -38,6 +38,9 @@
     "Example_Sentence": {
       "type": "text"
     },
+    "Contoh_Ayat": {
+      "type": "text"
+    },
     "Image": {
       "allowedTypes": [
         "images",
