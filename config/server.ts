@@ -4,4 +4,5 @@ export default ({ env }) => ({
   app: {
     keys: env.array('APP_KEYS'),
   },
+  internalToken: env('INTERNAL_TOKEN'),
 });
