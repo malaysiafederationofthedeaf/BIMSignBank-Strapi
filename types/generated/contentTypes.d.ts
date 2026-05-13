@@ -385,6 +385,7 @@ export interface ApiBimBim extends Struct.CollectionTypeSchema {
       'manyToOne',
       'api::category-group.category-group'
     >;
+    Contoh_Ayat: Schema.Attribute.Text;
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;

@@ -3,7 +3,7 @@ const { ValidationError } = errors;
 import path from 'path';
 import fs from 'fs/promises';
 import sharp from 'sharp';
-import { PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
+import { PutObjectCommand, DeleteObjectCommand, ListObjectsV2Command } from '@aws-sdk/client-s3';
 import { r2Client } from '../../../../utils/r2Client'; // adjust relative path
 
 const TARGET_WIDTH = 350;
@@ -22,6 +22,10 @@ function slugPerkataan(vocabName: string): string {
     .replace(/\?/g, "")           // legacy: remove '?'
     .replace(/[<>:"\|*]/g, "")   // extra safety for Windows filenames
     .replace(/[. ]+$/g, "");      // strip trailing '.' / spaces
+}
+
+function escapeRegExp(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 function isPublished(entry: any) {
@@ -109,6 +113,7 @@ async function uploadToR2(
     );
   } catch (err) {
     strapi.log.error('[bim lifecycles] Failed to upload to R2 via API', err);
+    throw err; // re-throw to be caught in handleImages and trigger ValidationError
   }
 }
 
@@ -128,6 +133,114 @@ async function deleteFromR2(strapi: any, outputFileName: string) {
     );
   } catch (err) {
     strapi.log.error('[bim lifecycles] Failed to delete from R2 via API', err);
+  }
+}
+
+async function deleteAllR2ImagesForSlug(strapi: any, baseNameSafe: string) {
+  const bucket = process.env.R2_BUCKET || 'mfd-signbank-images';
+  const prefix = `vocab/${baseNameSafe}`;
+  // Only match keys of the form:
+  //   vocab/<slug>.webp
+  //   vocab/<slug>-<number>.webp
+  const baseRe = new RegExp(
+    `^vocab/${escapeRegExp(baseNameSafe)}(?:\\.webp|-[0-9]+\\.webp)$`
+  );
+
+  try {
+    const resp = await r2Client.send(
+      new ListObjectsV2Command({
+        Bucket: bucket,
+        Prefix: prefix,
+      })
+    );
+
+    const contents = resp.Contents || [];
+    if (!contents.length) {
+      strapi.log.info(
+        `[bim lifecycles] No existing R2 vocab images found for slug=${baseNameSafe}`
+      );
+      return;
+    }
+
+    for (const obj of contents) {
+      if (!obj.Key) continue;
+      if (!baseRe.test(obj.Key)) {
+        // Key starts with vocab/<slug> but doesn't match our exact pattern → skip
+        continue;
+      }
+      try {
+        await r2Client.send(
+          new DeleteObjectCommand({
+            Bucket: bucket,
+            Key: obj.Key,
+          })
+        );
+        strapi.log.info(
+          `[bim lifecycles] Deleted old R2 vocab image bucket=${bucket} key=${obj.Key}`
+        );
+      } catch (err) {
+        strapi.log.error(
+          `[bim lifecycles] Failed to delete old R2 vocab image key=${obj.Key}`,
+          err
+        );
+      }
+    }
+  } catch (err) {
+    strapi.log.error(
+      `[bim lifecycles] Failed to list existing R2 vocab images for slug=${baseNameSafe}`,
+      err
+    );
+  }
+}
+
+async function setPublicUrlAndCleanup(
+  strapi: any,
+  entryId: number,
+  baseNameSafe: string,
+  images: any[]
+) {
+  // 1) Set Image_Public_URL on BIM entry and clear Image relation
+  if (!R2_PUBLIC_BASE_URL) {
+    strapi.log.warn(
+      '[bim lifecycles] R2_PUBLIC_BASE_URL not set; skipping Image_Public_URL update'
+    );
+  } else {
+    const primaryFileName = `${baseNameSafe}.webp`;
+    const base = R2_PUBLIC_BASE_URL.replace(/\/+$/, ''); // remove trailing slash(es)
+    const publicUrl = `${base}/vocab/${encodeURIComponent(primaryFileName)}`;
+
+    try {
+      await strapi.entityService.update('api::bim.bim', entryId, {
+        data: {
+          Image_Public_URL: publicUrl,
+          Image: null, // detach Strapi upload relation
+        },
+      });
+      strapi.log.info(
+        `[bim lifecycles] Set Image_Public_URL for entry ${entryId} to ${publicUrl} and cleared Image relation`
+      );
+    } catch (err) {
+      strapi.log.error(
+        `[bim lifecycles] Failed to update Image_Public_URL for entry ${entryId}`,
+        err
+      );
+    }
+  }
+
+  // 2) Delete upload plugin files (removes files from public/uploads)
+  for (const img of images) {
+    if (!img || !img.id) continue;
+    try {
+      await strapi.entityService.delete('plugin::upload.file', img.id);
+      strapi.log.info(
+        `[bim lifecycles] Deleted local upload file plugin::upload.file id=${img.id}`
+      );
+    } catch (err) {
+      strapi.log.error(
+        `[bim lifecycles] Failed to delete local upload file id=${img.id}`,
+        err
+      );
+    }
   }
 }
 
@@ -175,6 +288,16 @@ async function handleImages(strapi: any, entryId: number, rawResult?: any) {
     images = [images];
   }
 
+  if (!images.length) {
+    strapi.log.info('[bim lifecycles] Image array empty, skipping');
+    return;
+  }
+
+  // >>> CLEANUP ONLY WHEN WE HAVE IMAGES <<<
+  await deleteAllR2ImagesForSlug(strapi, baseNameSafe);
+
+  let processedAny = false;
+
   for (let i = 0; i < images.length; i++) {
     const img = images[i];
     if (!img || !img.url) continue;
@@ -182,7 +305,6 @@ async function handleImages(strapi: any, entryId: number, rawResult?: any) {
     try {
       const webpInfo = await compressToWebp(strapi, img, baseNameSafe, i);
       if (!webpInfo) {
-        // Unsupported or failed compression → treat as failure for this image
         throw new Error('Image compression failed or unsupported format.');
       }
 
@@ -190,20 +312,34 @@ async function handleImages(strapi: any, entryId: number, rawResult?: any) {
 
       await uploadToR2(strapi, outputFileName, tmpOutputPath);
 
+      try {
+        await fs.unlink(tmpOutputPath);
+      } catch (err) {
+        strapi.log.warn(
+          '[bim lifecycles] Failed to delete temp WebP file',
+          err
+        );
+      }
+
       await strapi.entityService.update('plugin::upload.file', img.id, {
         data: {
-          name: outputFileName,
           alternativeText: vocabName,
           caption: vocabName,
         },
       });
+
+      processedAny = true;
     } catch (err) {
       strapi.log.error('[bim lifecycles] Image processing failed', err);
-      // An image WAS attached, but processing failed → surface a blocking error
       throw new ValidationError(
         'Image upload/compression for this BIM entry failed. Please try again with a different image or try again later.'
       );
     }
+  }
+
+  if (processedAny) {
+    const bimId = entry.id || entryId;
+    await setPublicUrlAndCleanup(strapi, bimId, baseNameSafe, images);
   }
 }
 
@@ -256,8 +392,27 @@ function hasAtLeastOneImage(imageField: any): boolean {
 }
 
 async function validateImagesOrThrow(strapi: any, params: any) {
-  // NO VALIDATION FOR NOW
-  return;
+  const data = params?.data || {};
+  const perkataan = data.Perkataan;
+
+  if (typeof perkataan === 'string') {
+    // Block characters that we know cause issues across the stack:
+    //  - %: can break decodeURIComponent if not properly encoded
+    //  - \: has caused image / routing / DB weirdness
+    const forbiddenPattern = /[%\\]/g;
+    const matches = perkataan.match(forbiddenPattern);
+
+    if (matches) {
+      const unique = Array.from(new Set(matches));
+      throw new ValidationError(
+        `Perkataan contains unsupported characters: ${unique.join(
+          ' '
+        )}. Please remove these characters before saving.`
+      );
+    }
+  }
+
+  // Add more rules later if needed.
 }
 
 // ----- Lifecycles -----
