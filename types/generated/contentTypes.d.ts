@@ -385,11 +385,11 @@ export interface ApiBimBim extends Struct.CollectionTypeSchema {
       'manyToOne',
       'api::category-group.category-group'
     >;
+    Contoh_Ayat: Schema.Attribute.Text;
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
     Example_Sentence: Schema.Attribute.Text;
-    Contoh_Ayat: Schema.Attribute.Text;
     Image: Schema.Attribute.Media<'images' | 'files', true>;
     Image_Status: Schema.Attribute.String;
     locale: Schema.Attribute.String & Schema.Attribute.Private;
