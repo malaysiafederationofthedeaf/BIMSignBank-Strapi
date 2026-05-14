@@ -349,7 +349,8 @@ async function deleteImagesFromR2(strapi: any, entryId: number) {
   );
 
   const entry = await strapi.entityService.findOne('api::bim.bim', entryId, {
-    populate: { Image: true },
+    // We don't actually need Image here anymore
+    populate: {},
   });
 
   if (!entry) {
@@ -368,21 +369,8 @@ async function deleteImagesFromR2(strapi: any, entryId: number) {
   // Use the same naming rule as handleImages
   const baseNameSafe = slugPerkataan(vocabName);
 
-  let images = entry.Image;
-  if (!images) {
-    strapi.log.info('[bim lifecycles] No Image attached on delete');
-    return;
-  }
-
-  if (!Array.isArray(images)) {
-    images = [images];
-  }
-
-  for (let i = 0; i < images.length; i++) {
-    const indexSuffix = i > 0 ? `-${i + 1}` : '';
-    const outputFileName = `${baseNameSafe}${indexSuffix}.webp`;
-    await deleteFromR2(strapi, outputFileName);
-  }
+  // Just delete everything in R2 for this slug
+  await deleteAllR2ImagesForSlug(strapi, baseNameSafe);
 }
 
 function hasAtLeastOneImage(imageField: any): boolean {
