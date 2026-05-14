@@ -349,7 +349,7 @@ async function deleteImagesFromR2(strapi: any, entryId: number) {
   );
 
   const entry = await strapi.entityService.findOne('api::bim.bim', entryId, {
-    populate: { Image: true },
+    populate: {}, // no need for Image
   });
 
   if (!entry) {
@@ -365,30 +365,33 @@ async function deleteImagesFromR2(strapi: any, entryId: number) {
     return;
   }
 
-  // Use the same naming rule as handleImages
   const baseNameSafe = slugPerkataan(vocabName);
 
-  let images = entry.Image;
-  if (!images) {
-    strapi.log.info('[bim lifecycles] No Image attached on delete');
+  // Prefer grouping by documentId (draft/publish siblings share this)
+  const docId = (entry as any).documentId;
+
+  const filters: any = docId
+    ? { documentId: docId }
+    : { Perkataan: vocabName };
+
+  // Find any other BIM entries that belong to the same logical vocab
+  const siblings = await strapi.entityService.findMany('api::bim.bim', {
+    filters,
+    fields: ['id', 'Perkataan', 'documentId'],
+    limit: 10, // small safety cap
+  });
+
+  const others = siblings.filter((e: any) => e.id !== entryId);
+
+  if (others.length > 0) {
+    strapi.log.info(
+      `[bim lifecycles] Another BIM entry for this vocab/document still exists (e.g. id=${others[0].id}); skipping R2 delete for slug=${baseNameSafe}`
+    );
     return;
   }
 
-  if (!Array.isArray(images)) {
-    images = [images];
-  }
-
-  for (let i = 0; i < images.length; i++) {
-    const indexSuffix = i > 0 ? `-${i + 1}` : '';
-    const outputFileName = `${baseNameSafe}${indexSuffix}.webp`;
-    await deleteFromR2(strapi, outputFileName);
-  }
-}
-
-function hasAtLeastOneImage(imageField: any): boolean {
-  if (!imageField) return false;
-  if (Array.isArray(imageField)) return imageField.length > 0;
-  return true; // single image case
+  // This is the last BIM entry for this vocab/document → safe to delete its R2 images
+  await deleteAllR2ImagesForSlug(strapi, baseNameSafe);
 }
 
 async function validateImagesOrThrow(strapi: any, params: any) {
