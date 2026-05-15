@@ -3,7 +3,7 @@ const { ValidationError } = errors;
 import path from 'path';
 import fs from 'fs/promises';
 import sharp from 'sharp';
-import { PutObjectCommand, DeleteObjectCommand, ListObjectsV2Command } from '@aws-sdk/client-s3';
+import { PutObjectCommand, DeleteObjectCommand, ListObjectsV2Command, CopyObjectCommand } from '@aws-sdk/client-s3';
 import { r2Client } from '../../../../utils/r2Client'; // adjust relative path
 
 const TARGET_WIDTH = 350;
@@ -117,25 +117,15 @@ async function uploadToR2(
   }
 }
 
-async function deleteFromR2(strapi: any, outputFileName: string) {
-  const bucket = process.env.R2_BUCKET || 'mfd-signbank-images';
-  const key = `vocab/${outputFileName}`;
-
-  try {
-    await r2Client.send(
-      new DeleteObjectCommand({
-        Bucket: bucket,
-        Key: key,
-      })
-    );
-    strapi.log.info(
-      `[bim lifecycles] Deleted from R2 bucket=${bucket} key=${key}`
-    );
-  } catch (err) {
-    strapi.log.error('[bim lifecycles] Failed to delete from R2 via API', err);
-  }
-}
-
+// Delete all R2 images for a single vocab slug.
+//
+// This removes every object whose key matches:
+//   vocab/<slug>.webp
+//   vocab/<slug>-<number>.webp
+// It is used by:
+//   - handleImages(...) when reprocessing images for a vocab
+//   - deleteImagesFromR2(...) when we decide it's safe to fully
+//     clean up R2 for a vocab that is being deleted.
 async function deleteAllR2ImagesForSlug(strapi: any, baseNameSafe: string) {
   const bucket = process.env.R2_BUCKET || 'mfd-signbank-images';
   const prefix = `vocab/${baseNameSafe}`;
@@ -193,6 +183,88 @@ async function deleteAllR2ImagesForSlug(strapi: any, baseNameSafe: string) {
   }
 }
 
+// Rename (move) all R2 images from one vocab slug to another.
+//
+// When Perkataan changes, we compute oldSlug/newSlug and call this
+// to move all objects:
+//   vocab/<oldSlug>.webp, vocab/<oldSlug>-<n>.webp
+// to:
+//   vocab/<newSlug>.webp, vocab/<newSlug>-<n>.webp
+// This keeps R2 keys aligned with the current Perkataan slug.
+async function renameR2ImagesForSlug(
+  strapi: any,
+  oldBaseNameSafe: string,
+  newBaseNameSafe: string
+) {
+  if (!oldBaseNameSafe || !newBaseNameSafe || oldBaseNameSafe === newBaseNameSafe) {
+    return;
+  }
+
+  const bucket = process.env.R2_BUCKET || 'mfd-signbank-images';
+  const oldPrefix = `vocab/${oldBaseNameSafe}`;
+  const baseRe = new RegExp(
+    `^vocab/${escapeRegExp(oldBaseNameSafe)}(?:\\.webp|-[0-9]+\\.webp)$`
+  );
+
+  try {
+    const resp = await r2Client.send(
+      new ListObjectsV2Command({
+        Bucket: bucket,
+        Prefix: oldPrefix,
+      })
+    );
+
+    const contents = resp.Contents || [];
+    if (!contents.length) {
+      strapi.log.info(
+        `[bim lifecycles] No existing R2 vocab images found to rename for slug=${oldBaseNameSafe}`
+      );
+      return;
+    }
+
+    for (const obj of contents) {
+      if (!obj.Key) continue;
+      const key = obj.Key as string;
+      if (!baseRe.test(key)) {
+        // Key starts with vocab/<oldSlug> but doesn't match our exact pattern
+        continue;
+      }
+
+      const suffix = key.slice(`vocab/${oldBaseNameSafe}`.length);
+      const newKey = `vocab/${newBaseNameSafe}${suffix}`;
+
+      try {
+        await r2Client.send(
+          new CopyObjectCommand({
+            Bucket: bucket,
+            CopySource: `${bucket}/${key}`,
+            Key: newKey,
+          })
+        );
+        await r2Client.send(
+          new DeleteObjectCommand({
+            Bucket: bucket,
+            Key: key,
+          })
+        );
+        strapi.log.info(
+          `[bim lifecycles] Renamed R2 vocab image bucket=${bucket} key=${key} -> ${newKey}`
+        );
+      } catch (err) {
+        strapi.log.error(
+          `[bim lifecycles] Failed to rename R2 vocab image key=${key} -> ${newKey}`,
+          err
+        );
+      }
+    }
+  } catch (err) {
+    strapi.log.error(
+      `[bim lifecycles] Failed to list R2 vocab images for rename from slug=${oldBaseNameSafe} to slug=${newBaseNameSafe}`,
+      err
+    );
+  }
+}
+
 async function setPublicUrlAndCleanup(
   strapi: any,
   entryId: number,
@@ -245,7 +317,15 @@ async function setPublicUrlAndCleanup(
 }
 
 // ----- Main handler -----
-
+// Main image handler used afterCreate/afterUpdate.
+//
+// Workflow for a vocab that has images:
+//   - Compress original upload(s) to WebP and upload to R2 using the
+//     Perkataan-based slug (vocab/<slug>.webp, vocab/<slug>-2.webp, ...).
+//   - Before uploading new images for a vocab, call
+//     deleteAllR2ImagesForSlug(...) to remove older R2 variants.
+//   - Update Image_Public_URL and clear the Image relation so that
+//     R2 + the slug become the source of truth for images.
 async function handleImages(strapi: any, entryId: number, rawResult?: any) {
   strapi.log.info(`[bim lifecycles] handleImages called for entry ${entryId}`);
 
@@ -343,6 +423,17 @@ async function handleImages(strapi: any, entryId: number, rawResult?: any) {
   }
 }
 
+// High-level R2 cleanup used by beforeDelete.
+//
+// Given a BIM entry id:
+//   1) Look up the entry and its Perkataan/documentId.
+//   2) Check for any *other* BIM entries that share the same
+//      documentId (preferred) or Perkataan.
+//   3) If any siblings still exist, SKIP deleting R2 images so
+//      draft/published copies don't wipe each other's data.
+//   4) Only when this is the *last* BIM entry for that vocab/document
+//      do we call deleteAllR2ImagesForSlug(...) to remove all R2
+//      images for that slug.
 async function deleteImagesFromR2(strapi: any, entryId: number) {
   strapi.log.info(
     `[bim lifecycles] deleteImagesFromR2 called for entry ${entryId}`
@@ -430,7 +521,73 @@ export default {
     await validateImagesOrThrow(strapi, event.params);
   },
 
+  // beforeUpdate:
+  // - Validates Perkataan as usual.
+  // - Detects when Perkataan is being changed for an existing BIM entry.
+  // - On Perkataan change:
+  //     * Computes old and new slugs using slugPerkataan.
+  //     * Calls renameR2ImagesForSlug(...) to move all R2 images
+  //       from vocab/<oldSlug>*.webp to vocab/<newSlug>*.webp.
+  //     * Updates Image_Public_URL to point at the new slug (if
+  //       R2_PUBLIC_BASE_URL is configured).
+  // - Then runs validateImagesOrThrow(...) as normal.
   async beforeUpdate(event: any) {
+    const where = event?.params?.where;
+    const id =
+      typeof where?.id === 'number' || typeof where?.id === 'string'
+        ? Number(where.id)
+        : null;
+
+    if (id) {
+      try {
+        const existing = await strapi.entityService.findOne('api::bim.bim', id, {
+          fields: ['Perkataan'],
+        });
+
+        const data = event.params?.data || {};
+        const newPerkataan = data.Perkataan;
+
+        if (
+          existing &&
+          typeof existing.Perkataan === 'string' &&
+          typeof newPerkataan === 'string' &&
+          existing.Perkataan !== newPerkataan
+        ) {
+          const oldSlug = slugPerkataan(existing.Perkataan);
+          const newSlug = slugPerkataan(newPerkataan);
+
+          if (oldSlug !== newSlug) {
+            await renameR2ImagesForSlug(strapi, oldSlug, newSlug);
+
+            if (R2_PUBLIC_BASE_URL) {
+              const base = R2_PUBLIC_BASE_URL.replace(/\/+$/, '');
+              const primaryFileName = `${newSlug}.webp`;
+              const publicUrl = `${base}/vocab/${encodeURIComponent(primaryFileName)}`;
+
+              try {
+                await strapi.entityService.update('api::bim.bim', id, {
+                  data: { Image_Public_URL: publicUrl } as any,
+                });
+                strapi.log.info(
+                  `[bim lifecycles] Updated Image_Public_URL for entry ${id} after Perkataan rename to slug=${newSlug}`
+                );
+              } catch (err) {
+                strapi.log.error(
+                  `[bim lifecycles] Failed to update Image_Public_URL for entry ${id} after Perkataan rename`,
+                  err
+                );
+              }
+            }
+          }
+        }
+      } catch (err) {
+        strapi.log.error(
+          `[bim lifecycles] Failed during Perkataan rename handling in beforeUpdate for entry id=${id}`,
+          err
+        );
+      }
+    }
+
     await validateImagesOrThrow(strapi, event.params);
   },
 
