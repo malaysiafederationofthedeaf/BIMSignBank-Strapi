@@ -423,6 +423,7 @@ export interface ApiCategoryGroupCategoryGroup
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
     GroupCategory: Schema.Attribute.String;
+    Image: Schema.Attribute.Media<'images' | 'files'>;
     KumpulanKategori: Schema.Attribute.String;
     locale: Schema.Attribute.String & Schema.Attribute.Private;
     localizations: Schema.Attribute.Relation<
