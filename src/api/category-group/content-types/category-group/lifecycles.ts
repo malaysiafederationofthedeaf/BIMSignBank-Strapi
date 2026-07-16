@@ -24,10 +24,19 @@ const BUCKET = process.env.R2_BUCKET || 'mfd-signbank-images';
 // (the vocab pipeline pairs slugPerkataan here with Store.slugPerkataan on the
 // frontend; the frontend needs a matching slug for KumpulanKategori before it
 // can resolve these category/<slug>.webp URLs).
+//
+// The webp filename is built from the CATEGORY name only -- the part after "/"
+// in KumpulanKategori. The group is intentionally NOT included, so the R2
+// object for "Alam/Haiwan" is category/Haiwan.webp (not category/Alam-Haiwan.webp),
+// matching the files the frontend already requests. Spaces, "&" and case are
+// preserved (they are URL-encoded when fetched).
 function slugKumpulanKategori(categoryName: string): string {
-  return categoryName
+  const categoryOnly = categoryName.includes("/")
+    ? categoryName.split("/").pop() || categoryName
+    : categoryName;
+  return categoryOnly
     .trim()
-    .replace(/[!/]/g, "-")        // legacy: '!' and '/' -> '-'
+    .replace(/!/g, "-")           // legacy: '!' -> '-'
     .replace(/\?/g, "")           // legacy: remove '?'
     .replace(/[<>:"\|*]/g, "")   // extra safety for Windows filenames
     .replace(/[. ]+$/g, "");      // strip trailing '.' / spaces
